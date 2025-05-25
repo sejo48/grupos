@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Salidas - LocalStorage</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script type="module">
+        const LOCAL_STORAGE_KEY = 'passengerGroupsSheetData_v4'; // Nueva versión por cambio en datos iniciales
+
+        const groupsContainer = document.getElementById('groupsContainer');
+        const messageArea = document.getElementById('messageArea');
+        // floatingColorPicker ya no es necesario
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        if(userIdDisplay) userIdDisplay.textContent = "Modo: Almacenamiento Local";
+
+        const initialGroupDataConfig = [
+            { name: "Grupo 1", orderIndex: 1 },
+            { name: "Grupo 2", orderIndex: 2 },
+            { name: "Grupo 3", orderIndex: 3 },
+            { name: "Grupo 4", orderIndex: 4 },
+            { name: "Grupo 5", orderIndex: 5 }
+        ];
+
+        const seatColorOptions = [ // El orden es importante para ciclar
+            { value: "", label: "Sin color", classBase: "bg-gray-300" },
+            { value: "blue", label: "Azul", classBase: "bg-blue-500" },
+            { value: "red", label: "Rojo", classBase: "bg-red-500" },
+            { value: "yellow", label: "Amarillo", classBase: "bg-yellow-400" },
+            { value: "green", label: "Verde", classBase: "bg-green-500" }
+        ];
+
+        let groupsDataCache = []; 
+
+        function showAppMessage(message, type = 'info') {
+            messageArea.textContent = message;
+            messageArea.className = 'mb-3 p-2 text-center text-xs sm:text-sm rounded-md shadow-sm'; 
+            if (type === 'error') {
+                messageArea.classList.add('bg-red-100', 'text-red-700', 'border', 'border-red-300');
+            } else if (type === 'success') {
+                messageArea.classList.add('bg-green-100', 'text-green-700', 'border', 'border-green-300');
+            } else { 
+                messageArea.classList.add('bg-blue-100', 'text-blue-700', 'border', 'border-blue-300');
+            }
+        }
+
+        function main() {
+            loadGroupsFromLocalStorage(); 
+        }
+
+        function loadGroupsFromLocalStorage() {
+            showAppMessage("Cargando datos locales...");
+            try {
+                const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (storedData) {
+                    groupsDataCache = JSON.parse(storedData);
+                    // Verificación de la estructura de datos, incluyendo el asistente
+                    if (!Array.isArray(groupsDataCache) || 
+                        groupsDataCache.length !== initialGroupDataConfig.length || 
+                        !groupsDataCache.every(g => 
+                            typeof g.orderIndex === 'number' && 
+                            Array.isArray(g.passengers) && 
+                            g.passengers.length === 4 &&
+                            g.passengers[0].name === "Asistente" && // Verificar si el primer pasajero es "Asistente"
+                            g.passengers[0].seatColor === "blue"  // Verificar si el color del asistente es azul
+                        )) {
+                        console.warn("Estructura de datos en localStorage no válida o desactualizada (falta Asistente o color). Reiniciando.");
+                        createInitialGroupDataInLocalStorage();
+                    } else {
+                        renderGroupBlocks();
+                        showAppMessage(`Datos cargados desde almacenamiento local.`, 'success');
+                    }
+                } else {
+                    createInitialGroupDataInLocalStorage();
+                }
+            } catch (error) {
+                console.error("Error al cargar datos de localStorage:", error);
+                showAppMessage("Error al cargar datos. Se usarán datos iniciales.", 'error');
+                createInitialGroupDataInLocalStorage();
+            }
+        }
+
+        function createInitialGroupDataInLocalStorage() {
+            showAppMessage("Creando estructura de datos inicial para 5 grupos con Asistente...");
+            groupsDataCache = initialGroupDataConfig.map(groupConfig => {
+                // Primer pasajero es "Asistente" con color azul
+                const initialPassengers = [
+                    { name: "Asistente", time: "", seatColor: "blue" }, // Asistente predeterminado
+                    { name: "", time: "", seatColor: "" },
+                    { name: "", time: "", seatColor: "" },
+                    { name: "", time: "", seatColor: "" }
+                ];
+                return {
+                    name: groupConfig.name,
+                    orderIndex: groupConfig.orderIndex, 
+                    passengers: initialPassengers,
+                    lastModified: new Date().toISOString()
+                };
+            });
+            saveGroupsToLocalStorage();
+            renderGroupBlocks(); 
+            showAppMessage("Datos iniciales (con Asistente) creados y guardados localmente.", 'info');
+        }
+
+        function saveGroupsToLocalStorage() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(groupsDataCache));
+                console.log("Datos guardados en localStorage.");
+            } catch (error) {
+                console.error("Error al guardar datos en localStorage:", error);
+                showAppMessage("Error al guardar los datos. Es posible que el almacenamiento esté lleno.", "error");
+            }
+        }
+
+        function renderGroupBlocks() {
+            groupsContainer.innerHTML = '';
+            if (!Array.isArray(groupsDataCache)) { 
+                console.error("groupsDataCache no es un array, no se puede renderizar.");
+                showAppMessage("Error interno: No se pueden mostrar los grupos.", "error");
+                return;
+            }
+
+            groupsDataCache.forEach(group => {
+                const groupBlock = document.createElement('div');
+                groupBlock.className = 'group-block bg-white border border-gray-300 rounded-sm shadow';
+                let passengersHTML = '';
+                for (let i = 0; i < 4; i++) {
+                    const passengerData = group.passengers[i] || { name: "", time: "", seatColor: "" };
+                    const currentSeatColorValue = passengerData.seatColor || "";
+                    const colorOptForIndicator = seatColorOptions.find(c => c.value === currentSeatColorValue) || seatColorOptions[0];
+                    // El primer pasajero (Asistente) no debería ser editable en nombre si se desea que sea fijo.
+                    // Por ahora, se mantiene editable, pero se inicializa como "Asistente".
+                    const passengerNameInput = (i === 0 && passengerData.name === "Asistente") ?
+                        `<input type="text" value="${passengerData.name}" maxlength="15" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="name" class="passenger-data-input w-full text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5 font-semibold text-gray-600" placeholder="Pasajero ${i+1}" readonly>`
+                        : `<input type="text" value="${passengerData.name}" maxlength="15" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="name" class="passenger-data-input w-full text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5" placeholder="Pasajero ${i+1}">`;
+
+                    passengersHTML += `
+                        <tr class="border-b border-gray-200 last:border-b-0">
+                            <td class="p-1.5 w-2"><div class="h-full w-full ${colorOptForIndicator.classBase} rounded-sm passenger-color-indicator"></div></td>
+                            <td class="p-1.5">
+                                ${passengerNameInput}
+                            </td>
+                            <td class="p-1.5">
+                                <input type="text" value="${passengerData.time}" maxlength="5" pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="time" class="passenger-data-input w-12 sm:w-16 text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5" placeholder="HH:MM">
+                            </td>
+                            <td class="p-1.5 text-center">
+                                <div class="seat-color-cycler inline-block w-6 h-6 rounded-md cursor-pointer border border-gray-300 ${colorOptForIndicator.classBase}" 
+                                     title="Clic para cambiar color de asiento" 
+                                     data-group-id="${group.orderIndex}" 
+                                     data-passenger-index="${i}" 
+                                     data-current-color="${currentSeatColorValue}">
+                                </div>
+                            </td>
+                        </tr>`;
+                }
+                groupBlock.innerHTML = `
+                    <div class="group-header grid grid-cols-3 bg-gray-100 border-b border-gray-300">
+                        <div class="font-semibold p-1.5 text-xs sm:text-sm text-gray-700 col-span-1">${group.name}</div>
+                        <div class="font-semibold p-1.5 text-xs sm:text-sm text-gray-700 text-center col-span-1">Hora</div>
+                        <div class="font-semibold p-1.5 text-xs sm:text-sm text-gray-700 text-center col-span-1">Asiento</div>
+                    </div>
+                    <table class="w-full"><tbody>${passengersHTML}</tbody></table>`;
+                groupsContainer.appendChild(groupBlock);
+            });
+
+            document.querySelectorAll('.passenger-data-input').forEach(input => {
+                if (!input.readOnly) { // Solo añadir listeners a inputs no readonly
+                    input.addEventListener('blur', handlePassengerDataUpdate);
+                    input.addEventListener('keypress', (event) => { if (event.key === 'Enter') input.blur(); });
+                }
+            });
+            document.querySelectorAll('.seat-color-cycler').forEach(cycler => {
+                cycler.addEventListener('click', handleSeatColorCycle);
+            });
+        }
+        
+        function handleSeatColorCycle(event) {
+            const cyclerElement = event.currentTarget;
+            const groupId = parseInt(cyclerElement.dataset.groupId);
+            const passengerIndex = parseInt(cyclerElement.dataset.passengerIndex);
+            let currentColorValue = cyclerElement.dataset.currentColor;
+
+            console.log(`DEBUG: SeatColorCycle - BEFORE - Group: ${groupId}, PIndex: ${passengerIndex}, CurrentColor: ${currentColorValue}`);
+
+            let currentIndex = seatColorOptions.findIndex(opt => opt.value === currentColorValue);
+            if (currentIndex === -1) currentIndex = 0; 
+
+            const nextIndex = (currentIndex + 1) % seatColorOptions.length;
+            const nextColorOption = seatColorOptions[nextIndex];
+            
+            console.log(`DEBUG: SeatColorCycle - AFTER - NextColorValue: ${nextColorOption.value}`);
+
+            updatePassengerField(groupId, passengerIndex, "seatColor", nextColorOption.value, cyclerElement);
+        }
+        
+        function handlePassengerDataUpdate(event) {
+            const inputElement = event.target;
+            const { groupId, passengerIndex, field } = inputElement.dataset; 
+            const newValue = inputElement.value.trim();
+            updatePassengerField(parseInt(groupId), parseInt(passengerIndex), field, newValue, inputElement);
+        }
+
+        function updatePassengerField(groupIdOrderIndex, passengerIndex, field, newValue, UIMarkerElement) {
+            console.log(`DEBUG: updatePassengerField - START - Group: ${groupIdOrderIndex}, PIndex: ${passengerIndex}, Field: ${field}, Value: ${newValue}`);
+            console.log("DEBUG: updatePassengerField - UIMarkerElement:", UIMarkerElement); 
+
+            const groupToUpdate = groupsDataCache.find(g => g.orderIndex === groupIdOrderIndex);
+            if (!groupToUpdate) {
+                console.error(`updatePassengerField: Grupo con orderIndex ${groupIdOrderIndex} no encontrado.`);
+                showAppMessage(`Error: Grupo no encontrado.`, 'error');
+                return;
+            }
+            
+            // Prevenir la modificación del nombre del Asistente si el campo es 'name' y es el primer pasajero
+            if (field === 'name' && passengerIndex === 0 && groupToUpdate.passengers[passengerIndex] && groupToUpdate.passengers[passengerIndex].name === "Asistente" && newValue !== "Asistente") {
+                console.log("DEBUG: updatePassengerField - Intento de cambiar nombre de Asistente bloqueado.");
+                showAppMessage("El nombre del Asistente no se puede cambiar.", "info");
+                // Revertir el valor en la UI si es un input
+                if (UIMarkerElement.tagName === 'INPUT') {
+                    UIMarkerElement.value = "Asistente";
+                }
+                return; // No guardar el cambio
+            }
+
+
+            if (!groupToUpdate.passengers[passengerIndex]) { 
+                groupToUpdate.passengers[passengerIndex] = { name: "", time: "", seatColor: "" };
+            }
+            groupToUpdate.passengers[passengerIndex][field] = newValue;
+            groupToUpdate.lastModified = new Date().toISOString();
+            
+            saveGroupsToLocalStorage(); 
+            
+            console.log(`DEBUG: updatePassengerField - UI update for field '${field}'.`);
+            if (field === 'seatColor') {
+                if (!UIMarkerElement || typeof UIMarkerElement.closest !== 'function') {
+                    console.error("DEBUG: updatePassengerField - UIMarkerElement is NULL or not a valid DOM element for .closest() when updating seatColor UI.");
+                } else {
+                    const colorOption = seatColorOptions.find(c => c.value === newValue) || seatColorOptions[0];
+                    const trElement = UIMarkerElement.closest('tr'); 
+                    if (trElement) {
+                        const mainIndicatorDiv = trElement.querySelector('.passenger-color-indicator');
+                        if (mainIndicatorDiv) {
+                            mainIndicatorDiv.className = `h-full w-full ${colorOption.classBase} rounded-sm passenger-color-indicator`;
+                        }
+                    } else {
+                        console.warn("DEBUG: updatePassengerField - Could not find parent <tr> for UIMarkerElement:", UIMarkerElement);
+                    }
+                    UIMarkerElement.className = `seat-color-cycler inline-block w-6 h-6 rounded-md cursor-pointer border border-gray-300 ${colorOption.classBase}`;
+                    UIMarkerElement.dataset.currentColor = newValue; 
+                }
+            }
+
+            if (UIMarkerElement && UIMarkerElement.classList && typeof UIMarkerElement.classList.add === 'function') { 
+                if (!(field === 'name' && passengerIndex === 0)) { // No mostrar anillo verde si se intentó cambiar nombre de asistente
+                    UIMarkerElement.classList.add('ring-1', 'ring-offset-1', 'ring-green-500');
+                    setTimeout(() => {
+                        if (UIMarkerElement.classList) { 
+                           UIMarkerElement.classList.remove('ring-1', 'ring-offset-1', 'ring-green-500');
+                        }
+                    }, 1500);
+                }
+            }
+        }
+        document.addEventListener('DOMContentLoaded', main);
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+        .group-block { min-width: 230px; }
+        .passenger-data-input::placeholder { color: #9ca3af; font-size: 0.8em; }
+        #carImageContainer { width: 100%; max-width: 320px; height: auto; background-color: #e5e7eb; border: 1px solid #d1d5db; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin: 0 auto 1.5rem auto; overflow: hidden; }
+        #carImageContainer img { max-width: 100%; height: auto; border-radius: 6px; }
+        .icon-excel { display: inline-block; width: 20px; height: 20px; background-color: #107c41; color: white; text-align: center; font-weight: bold; line-height: 20px; border-radius: 2px; font-size: 0.8em; }
+        .icon-pencil::before { content: "✏️"; font-size: 1em; }
+        .icon-dots::before { content: "⋮"; font-size: 1.2em; font-weight: bold; }
+    </style>
+</head>
+<body class="text-gray-800">
+    <div id="app" class="container mx-auto p-3 sm:p-4 max-w-4xl">
+        <header class="mb-4 bg-white p-2 shadow-sm border-b border-gray-300 rounded-t-md">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <div class="icon-excel">X</div>
+                    <span class="text-sm sm:text-base font-medium text-gray-700">Grupo</span>
+                    <span class="icon-pencil text-gray-500 cursor-pointer hover:text-gray-700" title="Editar nombre de hoja (visual)"></span>
+                </div>
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <button class="text-xs sm:text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap">Abrir en la aplicación</button>
+                    <span class="icon-dots text-gray-500 cursor-pointer hover:text-gray-700" title="Más opciones (visual)"></span>
+                </div>
+            </div>
+             <p id="userIdDisplay" class="text-xs text-gray-400 mt-1 text-center">Cargando...</p>
+        </header>
+        <div id="messageArea" class="mb-3 p-2 text-center text-xs sm:text-sm rounded-md bg-blue-100 text-blue-700 border border-blue-300 shadow-sm">
+            </div>
+        <div id="carImageContainer">
+            <img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjXXtc-HYJHEw4jSwT98ggn2QxRUq0bA4GM2BurC0avZKazBLCtR-ocMkEzyIjoxGZt63uwCzmOLJpuYzbJdlbMG2fTnBL_SpeiVfO1PNgBBNAPpJ2slSQ6NHEJFL3okAtBurTR-2Tzgqk7aV7zOBqE1OOCGGYXe0q9QHLhg5OlUg-kXCOq1odExhEHerM/s412/dsfdfdf.JPG" 
+                 alt="Imagen Principal del Vehículo" 
+                 onerror="this.style.display='none'; this.parentElement.innerHTML+='<p class=\'text-xs text-red-500 p-2\'>Error al cargar la imagen del vehículo.</p>';">
+        </div>
+        <main id="groupsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            </main>
+        <footer class="mt-6 text-center text-xs text-gray-500 pb-4">
+            <p>&copy; <span id="currentYear"></span> Gestor de Salidas. Estilo Hoja.</p>
+            <script>document.getElementById('currentYear').textContent = new Date().getFullYear();</script>
+        </footer>
+    </div>
+</body>
+</html>
