@@ -8,11 +8,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <script type="module">
-        const LOCAL_STORAGE_KEY = 'passengerGroupsSheetData_v4'; // Nueva versión por cambio en datos iniciales
+        const LOCAL_STORAGE_KEY = 'passengerGroupsSheetData_v4'; // Mantener v4 si la estructura de datos no cambia fundamentalmente
 
         const groupsContainer = document.getElementById('groupsContainer');
         const messageArea = document.getElementById('messageArea');
-        // floatingColorPicker ya no es necesario
         const userIdDisplay = document.getElementById('userIdDisplay');
         if(userIdDisplay) userIdDisplay.textContent = "Modo: Almacenamiento Local";
 
@@ -24,7 +23,7 @@
             { name: "Grupo 5", orderIndex: 5 }
         ];
 
-        const seatColorOptions = [ // El orden es importante para ciclar
+        const seatColorOptions = [ 
             { value: "", label: "Sin color", classBase: "bg-gray-300" },
             { value: "blue", label: "Azul", classBase: "bg-blue-500" },
             { value: "red", label: "Rojo", classBase: "bg-red-500" },
@@ -56,17 +55,17 @@
                 const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (storedData) {
                     groupsDataCache = JSON.parse(storedData);
-                    // Verificación de la estructura de datos, incluyendo el asistente
                     if (!Array.isArray(groupsDataCache) || 
                         groupsDataCache.length !== initialGroupDataConfig.length || 
                         !groupsDataCache.every(g => 
                             typeof g.orderIndex === 'number' && 
                             Array.isArray(g.passengers) && 
                             g.passengers.length === 4 &&
-                            g.passengers[0].name === "Asistente" && // Verificar si el primer pasajero es "Asistente"
-                            g.passengers[0].seatColor === "blue"  // Verificar si el color del asistente es azul
+                            // La verificación del asistente se mantiene si es un requisito
+                            g.passengers[0].name === "Asistente" && 
+                            g.passengers[0].seatColor === "blue"  
                         )) {
-                        console.warn("Estructura de datos en localStorage no válida o desactualizada (falta Asistente o color). Reiniciando.");
+                        console.warn("Estructura de datos en localStorage no válida o desactualizada. Reiniciando.");
                         createInitialGroupDataInLocalStorage();
                     } else {
                         renderGroupBlocks();
@@ -85,9 +84,8 @@
         function createInitialGroupDataInLocalStorage() {
             showAppMessage("Creando estructura de datos inicial para 5 grupos con Asistente...");
             groupsDataCache = initialGroupDataConfig.map(groupConfig => {
-                // Primer pasajero es "Asistente" con color azul
                 const initialPassengers = [
-                    { name: "Asistente", time: "", seatColor: "blue" }, // Asistente predeterminado
+                    { name: "Asistente", time: "", seatColor: "blue" }, 
                     { name: "", time: "", seatColor: "" },
                     { name: "", time: "", seatColor: "" },
                     { name: "", time: "", seatColor: "" }
@@ -130,8 +128,7 @@
                     const passengerData = group.passengers[i] || { name: "", time: "", seatColor: "" };
                     const currentSeatColorValue = passengerData.seatColor || "";
                     const colorOptForIndicator = seatColorOptions.find(c => c.value === currentSeatColorValue) || seatColorOptions[0];
-                    // El primer pasajero (Asistente) no debería ser editable en nombre si se desea que sea fijo.
-                    // Por ahora, se mantiene editable, pero se inicializa como "Asistente".
+                    
                     const passengerNameInput = (i === 0 && passengerData.name === "Asistente") ?
                         `<input type="text" value="${passengerData.name}" maxlength="15" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="name" class="passenger-data-input w-full text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5 font-semibold text-gray-600" placeholder="Pasajero ${i+1}" readonly>`
                         : `<input type="text" value="${passengerData.name}" maxlength="15" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="name" class="passenger-data-input w-full text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5" placeholder="Pasajero ${i+1}">`;
@@ -143,7 +140,7 @@
                                 ${passengerNameInput}
                             </td>
                             <td class="p-1.5">
-                                <input type="text" value="${passengerData.time}" maxlength="5" pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="time" class="passenger-data-input w-12 sm:w-16 text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5" placeholder="HH:MM">
+                                <input type="text" value="${passengerData.time}" maxlength="10" data-group-id="${group.orderIndex}" data-passenger-index="${i}" data-field="time" class="passenger-data-input w-20 sm:w-24 text-xs sm:text-sm bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm px-1 py-0.5" placeholder="HH:MM AM/PM">
                             </td>
                             <td class="p-1.5 text-center">
                                 <div class="seat-color-cycler inline-block w-6 h-6 rounded-md cursor-pointer border border-gray-300 ${colorOptForIndicator.classBase}" 
@@ -166,7 +163,7 @@
             });
 
             document.querySelectorAll('.passenger-data-input').forEach(input => {
-                if (!input.readOnly) { // Solo añadir listeners a inputs no readonly
+                if (!input.readOnly) { 
                     input.addEventListener('blur', handlePassengerDataUpdate);
                     input.addEventListener('keypress', (event) => { if (event.key === 'Enter') input.blur(); });
                 }
@@ -213,17 +210,14 @@
                 return;
             }
             
-            // Prevenir la modificación del nombre del Asistente si el campo es 'name' y es el primer pasajero
             if (field === 'name' && passengerIndex === 0 && groupToUpdate.passengers[passengerIndex] && groupToUpdate.passengers[passengerIndex].name === "Asistente" && newValue !== "Asistente") {
                 console.log("DEBUG: updatePassengerField - Intento de cambiar nombre de Asistente bloqueado.");
                 showAppMessage("El nombre del Asistente no se puede cambiar.", "info");
-                // Revertir el valor en la UI si es un input
                 if (UIMarkerElement.tagName === 'INPUT') {
                     UIMarkerElement.value = "Asistente";
                 }
-                return; // No guardar el cambio
+                return; 
             }
-
 
             if (!groupToUpdate.passengers[passengerIndex]) { 
                 groupToUpdate.passengers[passengerIndex] = { name: "", time: "", seatColor: "" };
@@ -254,7 +248,7 @@
             }
 
             if (UIMarkerElement && UIMarkerElement.classList && typeof UIMarkerElement.classList.add === 'function') { 
-                if (!(field === 'name' && passengerIndex === 0)) { // No mostrar anillo verde si se intentó cambiar nombre de asistente
+                if (!(field === 'name' && passengerIndex === 0)) { 
                     UIMarkerElement.classList.add('ring-1', 'ring-offset-1', 'ring-green-500');
                     setTimeout(() => {
                         if (UIMarkerElement.classList) { 
@@ -268,7 +262,7 @@
     </script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
-        .group-block { min-width: 230px; }
+        .group-block { min-width: 240px; /* Ajustado ligeramente para el campo de hora más ancho */ }
         .passenger-data-input::placeholder { color: #9ca3af; font-size: 0.8em; }
         #carImageContainer { width: 100%; max-width: 320px; height: auto; background-color: #e5e7eb; border: 1px solid #d1d5db; border-radius: 8px; display: flex; justify-content: center; align-items: center; margin: 0 auto 1.5rem auto; overflow: hidden; }
         #carImageContainer img { max-width: 100%; height: auto; border-radius: 6px; }
